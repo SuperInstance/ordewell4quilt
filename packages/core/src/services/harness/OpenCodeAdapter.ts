@@ -9,6 +9,9 @@ const SERVER_READY_TIMEOUT_MS = 30000;
 const STDERR_TAIL_CHARS = 4000;
 /** How long a turn waits for `/event` before posting anyway. See {@link OpenCodeAdapter.send}. */
 const STREAM_CONNECT_TIMEOUT_MS = 5000;
+/** See {@link OpenCodeAdapter.recoverReply}. */
+const RECOVERY_POLL_INTERVAL_MS = 2000;
+const RECOVERY_TIMEOUT_MS = 900000;
 
 /**
  * Tools withheld from a planning session (T1). `question` is the load-bearing
@@ -48,10 +51,17 @@ interface OpenCodePermissionAsk {
   metadata?: Record<string, unknown>;
 }
 
+interface OpenCodeMessageInfo {
+  id?: string;
+  role?: string;
+  time?: { created?: number; completed?: number };
+  /** `AssistantMessage.error` is a tagged union: `{ name, data: { message } }`. */
+  error?: { name?: string; data?: { message?: string } };
+}
+
 interface OpenCodeMessageResponse {
   parts?: OpenCodePart[];
-  /** `AssistantMessage.error` is a tagged union: `{ name, data: { message } }`. */
-  info?: { id?: string; error?: { name?: string; data?: { message?: string } } };
+  info?: OpenCodeMessageInfo;
   error?: { message?: string } | string;
 }
 
@@ -65,6 +75,35 @@ function splitModelId(id: string): { providerID: string; modelID: string } | nul
   const slash = id.indexOf('/');
   if (slash <= 0 || slash === id.length - 1) return null;
   return { providerID: id.slice(0, slash), modelID: id.slice(slash + 1) };
+}
+
+/**
+ * Flatten an error and its `cause` chain into one line. Node's `fetch` reports
+ * every transport failure as the same bare `TypeError: fetch failed`; which
+ * failure it was (a socket reset, a refused connect, undici's 300s header
+ * timeout) lives only in `cause`, so a message without it names nothing.
+ */
+function describeError(err: unknown): string {
+  const visited = new Set<unknown>();
+  const lines: string[] = [];
+  let current: unknown = err;
+  while (current && !visited.has(current)) {
+    visited.add(current);
+    if (!(current instanceof Error)) { lines.push(String(current)); break; }
+    const code = (current as { code?: unknown }).code;
+    const suffix = typeof code === 'string' && !current.message.includes(code) ? ` (${code})` : '';
+    lines.push(`${current.message}${suffix}`);
+    current = current.cause;
+  }
+  return lines.join(': ');
+}
+
+function delay(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, ms);
+    timer.unref?.();
+    signal?.addEventListener('abort', () => { clearTimeout(timer); resolve(); }, { once: true });
+  });
 }
 
 /**
@@ -93,6 +132,8 @@ export class OpenCodeAdapter implements AgentAdapter {
   private opts: AgentStartOptions | null = null;
   /** Whether this turn has already emitted reply text — see {@link emitPart}. */
   private turnHasText = false;
+  /** The last assistant message already settled — the baseline {@link recoverReply} measures a new reply against. */
+  private lastAssistantId: string | null = null;
 
   constructor(private deps: AgentProcessDeps) {}
 
@@ -155,6 +196,11 @@ export class OpenCodeAdapter implements AgentAdapter {
       const existing = await this.json<{ id?: string }>('GET', `/session/${opts.resumeSessionId}`).catch(() => null);
       if (existing?.id) {
         this.sessionId = existing.id;
+        // A resumed session already holds assistant messages. Without a
+        // baseline, a recovery poll would accept one of those as this turn's
+        // reply, so the newest is claimed as already-seen before any turn runs.
+        const history = await this.json<OpenCodeMessageResponse[]>('GET', `/session/${existing.id}/message`).catch(() => null);
+        this.lastAssistantId = this.newestAssistantId(history);
         return;
       }
     }
@@ -209,31 +255,79 @@ export class OpenCodeAdapter implements AgentAdapter {
       const reply = await this.json<OpenCodeMessageResponse>('POST', `/session/${this.sessionId}/message`, body, signal);
 
       if (signal?.aborted) { this.dispose(); return; }
-
-      const failure = typeof reply?.error === 'string'
-        ? reply.error
-        : (reply?.error as { message?: string } | undefined)?.message ?? reply?.info?.error?.data?.message;
-      if (failure) {
-        onEvent({ type: 'error', message: failure });
-        return;
-      }
-      // The settled response is authoritative: it names the assistant message,
-      // so its parts are the ones that make up the reply. Tool parts already
-      // seen live are deduplicated by call id; anything the stream missed
-      // (including a stream that never connected) arrives here.
-      const assistantId = reply?.info?.id;
-      for (const part of reply?.parts ?? []) {
-        if (part.type !== 'tool' && assistantId && part.messageID !== assistantId) continue;
-        this.emitPart(part, seen, onEvent);
-      }
-      onEvent({ type: 'turn_end' });
+      this.settle(reply, seen, onEvent);
     } catch (err) {
       if (signal?.aborted) { this.dispose(); return; }
-      onEvent({ type: 'error', message: `The OpenCode planner turn failed: ${err instanceof Error ? err.message : String(err)}` });
+      // The POST is the turn's transport, not its work: the server plans on
+      // regardless of what happened to this socket. So a transport failure
+      // reads the reply back out of the session rather than losing a turn the
+      // server already finished (or is still finishing).
+      const recovered = this.exited ? null : await this.recoverReply(signal, onActivity);
+      if (recovered) { this.settle(recovered, seen, onEvent); return; }
+      onEvent({ type: 'error', message: `The OpenCode planner turn failed: ${describeError(err)}` });
     } finally {
       streamAbort.abort();
       await live.catch(() => { /* the stream is best-effort */ });
     }
+  }
+
+  /**
+   * Turn one settled assistant message into events. The settled response is
+   * authoritative: it names the assistant message, so its parts are the ones
+   * that make up the reply. Tool parts already seen live are deduplicated by
+   * call id; anything the stream missed (including a stream that never
+   * connected) arrives here.
+   */
+  private settle(reply: OpenCodeMessageResponse | null, seen: Set<string>, onEvent: (e: AgentEvent) => void): void {
+    const failure = typeof reply?.error === 'string'
+      ? reply.error
+      : (reply?.error as { message?: string } | undefined)?.message ?? reply?.info?.error?.data?.message;
+    if (failure) {
+      onEvent({ type: 'error', message: failure });
+      return;
+    }
+    const assistantId = reply?.info?.id;
+    for (const part of reply?.parts ?? []) {
+      if (part.type !== 'tool' && assistantId && part.messageID !== assistantId) continue;
+      this.emitPart(part, seen, onEvent);
+    }
+    if (assistantId) this.lastAssistantId = assistantId;
+    onEvent({ type: 'turn_end' });
+  }
+
+  /**
+   * Poll the session for this turn's assistant message after the POST's socket
+   * died under it. Node's global `fetch` is undici, which aborts a request
+   * whose response headers have not arrived within 300s — and OpenCode sends
+   * none until the turn is done, so any turn past five minutes fails as
+   * `TypeError: fetch failed` while the server is still working. The message
+   * exists server-side either way, so it is waited for and read back.
+   *
+   * A message that exists but has not completed is progress, not an answer:
+   * it refreshes the watchdog and the poll continues.
+   */
+  private async recoverReply(signal: AbortSignal | undefined, onActivity?: () => void): Promise<OpenCodeMessageResponse | null> {
+    const deadline = Date.now() + RECOVERY_TIMEOUT_MS;
+    for (;;) {
+      if (signal?.aborted || this.exited || this.disposed || !this.sessionId) return null;
+      const messages = await this.json<OpenCodeMessageResponse[]>('GET', `/session/${this.sessionId}/message`).catch(() => null);
+      const pending = Array.isArray(messages)
+        ? [...messages].reverse().find((m) => m.info?.role === 'assistant' && m.info.id && m.info.id !== this.lastAssistantId)
+        : undefined;
+      if (pending?.info?.time?.completed || pending?.info?.error) return pending;
+      if (pending) onActivity?.();
+      if (Date.now() >= deadline) return null;
+      await delay(RECOVERY_POLL_INTERVAL_MS, signal);
+    }
+  }
+
+  private newestAssistantId(messages: OpenCodeMessageResponse[] | null): string | null {
+    if (!Array.isArray(messages)) return null;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const info = messages[i]?.info;
+      if (info?.role === 'assistant' && info.id) return info.id;
+    }
+    return null;
   }
 
   /**
