@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [0.4.18] — 2026-09-07
+
+### Fixed
+
+- A long OpenCode planning turn no longer fails with "fetch failed" — the
+  planner reads the reply back out of the session instead of losing the turn.
+
 ### Added
 
 - A third built-in skill, `improve-codebase-architecture` — invoke with

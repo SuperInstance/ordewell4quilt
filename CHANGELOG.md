@@ -8,6 +8,20 @@ While Ordewell is pre-1.0, minor versions may contain breaking changes.
 
 ## [Unreleased]
 
+## [0.4.18] — 2026-09-07
+
+### Fixed
+
+- **A long OpenCode planning turn no longer fails with "fetch failed".** The
+  turn is one HTTP request held open for its whole duration, and OpenCode
+  sends no response headers until it ends — so Node's global `fetch`, which
+  gives up after 300 seconds, abandoned any turn past five minutes while the
+  server was still planning. The request is the turn's transport, not its
+  work: the reply is now read back out of the session instead of the turn
+  being lost, and a turn still in progress keeps the planner watchdog fed.
+  Failures that stay unrecoverable name the underlying cause rather than
+  reporting a bare `fetch failed`.
+
 ## [0.4.17] — 2026-09-02
 
 ### Added
