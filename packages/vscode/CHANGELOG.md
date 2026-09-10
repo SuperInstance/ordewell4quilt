@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [0.4.19] — 2026-09-10
+
+### Fixed
+
+- Expanding a task in the plan dock now collapses any other open task, so the
+  list stays readable instead of accumulating open cards.
+
 ## [0.4.18] — 2026-09-07
 
 ### Fixed

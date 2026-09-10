@@ -8,6 +8,15 @@ While Ordewell is pre-1.0, minor versions may contain breaking changes.
 
 ## [Unreleased]
 
+## [0.4.19] — 2026-09-10
+
+### Fixed
+
+- **Expanding a task in the plan dock now collapses any other open task.** The
+  cards acted like independent toggles, so opening several meant closing each
+  one by hand before the list was readable again. They now behave as an
+  accordion: at most one task body is open at a time.
+
 ## [0.4.18] — 2026-09-07
 
 ### Fixed
