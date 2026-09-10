@@ -56,6 +56,10 @@ interface TaskCardProps {
   onMarkComplete?: (taskId: string) => void;
   onMarkIncomplete?: (taskId: string) => void;
   onRunTask?: (taskId: string) => void;
+  /** Controlled expansion. When both are supplied the parent owns which card is
+   *  open (an accordion); omitted, the card keeps its own state. */
+  expanded?: boolean;
+  onExpandedChange?: (expanded: boolean) => void;
 }
 
 const STATUS_CONFIG: Record<string, { label: string; cls: string }> = {
@@ -124,8 +128,14 @@ export function runnerOptionsFor(runners: RunnerOption[] | undefined, assignedRu
   return [...runners, { id: assignedRunner, displayName: assignedRunner }];
 }
 
-export default function TaskCard({ task, models, modes, modelsByRunner, modesByRunner, runners, effectiveRunner, configuredProviders, modelApiMapping, isExecuting, output, idleSince, taskOrderMap, dependentCount, siblings, onDependenciesChange, onRunnerChange, onModelChange, onModelsRefreshNeeded, onModeChange, onRemoveTask, onPromptChange, onRetry, onSkip, onCancel, onForceStart, onMarkComplete, onMarkIncomplete, onRunTask }: TaskCardProps) {
-  const [expanded, setExpanded] = useState(false);
+export default function TaskCard({ task, models, modes, modelsByRunner, modesByRunner, runners, effectiveRunner, configuredProviders, modelApiMapping, isExecuting, output, idleSince, taskOrderMap, dependentCount, siblings, onDependenciesChange, onRunnerChange, onModelChange, onModelsRefreshNeeded, onModeChange, onRemoveTask, onPromptChange, onRetry, onSkip, onCancel, onForceStart, onMarkComplete, onMarkIncomplete, onRunTask, expanded: expandedProp, onExpandedChange }: TaskCardProps) {
+  const [internalExpanded, setInternalExpanded] = useState(false);
+  const isControlled = expandedProp !== undefined;
+  const expanded = isControlled ? expandedProp : internalExpanded;
+  const setExpanded = (next: boolean) => {
+    if (isControlled) onExpandedChange?.(next);
+    else setInternalExpanded(next);
+  };
   const [editingPrompt, setEditingPrompt] = useState<string | null>(null);
   const [editingDeps, setEditingDeps] = useState(false);
   const [completedSteps, setCompletedSteps] = useState<Set<number>>(new Set());

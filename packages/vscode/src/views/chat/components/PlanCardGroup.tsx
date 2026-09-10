@@ -72,6 +72,8 @@ export default function PlanCardGroup({
 }: PlanCardGroupProps) {
   const [mergeSelectedIds, setMergeSelectedIds] = useState<string[]>([]);
   const [mergeValidationError, setMergeValidationError] = useState<string | null>(null);
+  // Accordion: at most one top-level task open at a time.
+  const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
   const sorted = [...tasks].sort((a, b) => a.order - b.order);
   const taskOrderMap = new Map(tasks.map((t) => [t.id, t.order]));
   const mergeMode = mergeSelectedIds.length > 0;
@@ -233,6 +235,8 @@ export default function PlanCardGroup({
                 onMarkComplete={onMarkComplete}
                 onMarkIncomplete={onMarkIncomplete}
                 onRunTask={onRunTask}
+                expanded={expandedTaskId === task.id}
+                onExpandedChange={(next) => setExpandedTaskId(next ? task.id : null)}
               />
               {/* Gated on having a button to show: an empty action row is still a
                   bordered strip under every card. */}

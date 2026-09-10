@@ -188,6 +188,33 @@ describe('PlanCardGroup — per-task model list fallback', () => {
   });
 });
 
+describe('PlanCardGroup — accordion expansion', () => {
+  const tasks = [
+    makeTask({ id: 't1', order: 1, title: 'First', description: 'First detail' }),
+    makeTask({ id: 't2', order: 2, title: 'Second', description: 'Second detail' }),
+  ];
+
+  it('keeps at most one task body open at a time', () => {
+    render(<PlanCardGroup tasks={tasks} models={emptyModels} isExecuting={false} />);
+    fireEvent.click(screen.getByText('First'));
+    expect(document.querySelectorAll('.task-card-body')).toHaveLength(1);
+
+    fireEvent.click(screen.getByText('Second'));
+    const bodies = document.querySelectorAll('.task-card-body');
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0].textContent).toContain('Second detail');
+    expect(bodies[0].textContent).not.toContain('First detail');
+  });
+
+  it('collapses an open task when its header is clicked again', () => {
+    render(<PlanCardGroup tasks={tasks} models={emptyModels} isExecuting={false} />);
+    fireEvent.click(screen.getByText('First'));
+    expect(document.querySelectorAll('.task-card-body')).toHaveLength(1);
+    fireEvent.click(screen.getByText('First'));
+    expect(document.querySelectorAll('.task-card-body')).toHaveLength(0);
+  });
+});
+
 describe('PlanCardGroup — planner-driven split', () => {
   it('calls onSplit(taskId) directly with no manual spec dialog', () => {
     const onSplit = vi.fn();
