@@ -248,10 +248,21 @@ export class VerdictEngine {
     }
   }
 
+  /**
+   * Submit a synchronized resume token to the paused session. An interactive
+   * TUI only accepts the Enter keystroke (`\r`) — a `\n` types the token into
+   * its composer without sending it, leaving the agent paused until a human
+   * presses Enter. A line-oriented piped session has no composer; it reads a
+   * `\n`-terminated line, and the leading newline flushes a partial line.
+   */
+  private resumeToken(session: ITerminalSession, line: string): string {
+    return session.interactive ? `${line}\r` : `\n${line}\n`;
+  }
+
   approveCheckpoint(taskId: string): void {
     const session = this.pausedSessions.get(taskId);
     if (session) {
-      session.write('\nORDEWELL_CONTINUE\n');
+      session.write(this.resumeToken(session, 'ORDEWELL_CONTINUE'));
       this.pausedSessions.delete(taskId);
     }
   }
@@ -259,7 +270,7 @@ export class VerdictEngine {
   rejectCheckpoint(taskId: string, reason: string): void {
     const session = this.pausedSessions.get(taskId);
     if (session) {
-      session.write(`\nORDEWELL_REJECT: ${reason}\n`);
+      session.write(this.resumeToken(session, `ORDEWELL_REJECT: ${reason}`));
       this.pausedSessions.delete(taskId);
     }
   }

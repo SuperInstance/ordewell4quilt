@@ -122,6 +122,11 @@ describe('TmuxRunner', () => {
     expect(shellCmd).not.toContain(`'exec'`);
   });
 
+  it('marks its session interactive so resume tokens submit with Enter, not just type', async () => {
+    const session = await makeRunner().spawn(baseOpts(manifest()));
+    expect(session.interactive).toBe(true);
+  });
+
   it('passes the task cwd through to arg resolution, not just to the window', async () => {
     const m = manifest({
       runner: { command: 'test-cli', argsTemplate: ['{{if projectTrust}}', '-c', '{{projectTrust}}', '{{/if}}', '{{prompt}}'], promptInArgs: true },

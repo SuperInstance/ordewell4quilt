@@ -590,6 +590,19 @@ function setupChatListener(context: vscode.ExtensionContext): void {
                 await handleApprovePlan(planDeps());
               }
               break;
+            case 'reject': {
+              if (!ctx.taskId) break;
+              // Reject resumes the paused agent with the reason, rather than
+              // cancelling the task the way the generic 'cancel' action does.
+              let reason = '';
+              try {
+                reason = (JSON.parse(text) as { reason?: string }).reason ?? '';
+              } catch {
+                reason = text;
+              }
+              session.rejectCheckpoint(ctx.taskId, reason);
+              break;
+            }
             case 'retry':
               if (ctx.taskId) {
                 await session.retryTask(ctx.taskId);

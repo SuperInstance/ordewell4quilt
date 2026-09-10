@@ -1,7 +1,9 @@
 import React from 'react';
-import { describe, it, expect, beforeEach } from 'vitest';
-import { render, act, fireEvent } from '@testing-library/react';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { render, act, fireEvent, screen } from '@testing-library/react';
 import App from '../App';
+
+const api = (globalThis as unknown as { __vscodeApi: { postMessage: ReturnType<typeof vi.fn> } }).__vscodeApi;
 
 function send(msg: unknown) {
   act(() => {
@@ -105,6 +107,26 @@ describe('plan dock', () => {
     send({ type: 'checkpoint', taskId: 't1', taskTitle: 'Add rate limiting', summary: 'ready for review' });
 
     expect(document.querySelector('.plan-dock-approval')).toBeTruthy();
+  });
+
+  it('dismisses the checkpoint panel and posts a reject action when rejected', () => {
+    send({ type: 'planUpdated', plan });
+    send({ type: 'checkpoint', taskId: 't1', taskTitle: 'Add rate limiting', summary: 'ready for review' });
+    api.postMessage.mockClear();
+
+    fireEvent.click(document.querySelector('.checkpoint-reject-btn')!);
+    fireEvent.change(screen.getByPlaceholderText('Why are you rejecting this checkpoint?'), {
+      target: { value: 'not the right approach' },
+    });
+    fireEvent.click(screen.getByText('Send Rejection'));
+
+    expect(api.postMessage).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'sendMessage',
+      text: JSON.stringify({ reason: 'not the right approach' }),
+      actionContext: { type: 'reject', taskId: 't1' },
+    }));
+    // The whole point of rejecting is deciding; the box must not linger.
+    expect(document.querySelector('.checkpoint-panel')).toBeNull();
   });
 
   it('replays one chip per persisted revision marker, in order', () => {

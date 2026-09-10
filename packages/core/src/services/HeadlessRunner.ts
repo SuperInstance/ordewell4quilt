@@ -48,7 +48,7 @@ export class HeadlessSession extends AbstractTerminalSession {
   private outputBuffer = '';
   private controlStream: Writable | null = null;
 
-  constructor(id: string, taskId: string, private spawnImpl: SpawnFn) {
+  constructor(id: string, taskId: string, private spawnImpl: SpawnFn, readonly interactive: boolean = false) {
     super(id, taskId);
   }
 
@@ -153,7 +153,7 @@ export class HeadlessRunner extends AbstractRunner<HeadlessSession> {
   }
 
   protected createSession(id: string, taskId: string): HeadlessSession {
-    return new HeadlessSession(id, taskId, this.spawnImpl);
+    return new HeadlessSession(id, taskId, this.spawnImpl, this.defaultInteractive);
   }
 
   /** Everything up to, but not including, spawning — so a surface that owns its own child reaches the same decisions. */

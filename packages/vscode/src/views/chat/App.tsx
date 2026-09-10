@@ -860,7 +860,10 @@ export default function App() {
 
   const handleRejectCheckpoint = useCallback((reason: string) => {
     if (!checkpoint) return;
-    vscode.postMessage({ type: 'sendMessage', text: JSON.stringify({ reason }), runners, actionContext: { type: 'cancel', taskId: checkpoint.taskId } });
+    // Reject resumes the paused agent with the reason (rather than cancelling
+    // the task), and the panel is torn down immediately — leaving a decision
+    // box on screen after the decision is made asks the user to answer twice.
+    vscode.postMessage({ type: 'sendMessage', text: JSON.stringify({ reason }), runners, actionContext: { type: 'reject', taskId: checkpoint.taskId } });
     setCheckpoint(null);
   }, [checkpoint, runners]);
 

@@ -90,6 +90,11 @@ describe('HeadlessRunner', () => {
     ).rejects.toThrow(/Unknown runner: nope/);
   });
 
+  it('marks a piped session non-interactive so resume tokens use a newline', async () => {
+    const session = await makeRunner().runner.spawn(baseOpts(manifest()));
+    expect(session.interactive).toBe(false);
+  });
+
   it('emits raw output but buffers it ANSI-stripped', async () => {
     const m = manifest();
     const { runner, child } = makeRunner();

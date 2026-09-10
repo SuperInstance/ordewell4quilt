@@ -7,6 +7,14 @@ export interface ITerminalSession {
   getOutput(): string;
   write(text: string): void;
   /**
+   * True when the session runs the agent as a raw-mode TUI (a real PTY for the
+   * VS Code terminal, a tmux window). Such a surface submits an input line on
+   * the Enter keystroke (`\r`), so a synchronized resume token terminated with
+   * `\n` only types the line and never sends it. A line-oriented piped session
+   * (`defaultInteractive = false`) leaves this false and accepts `\n`.
+   */
+  readonly interactive?: boolean;
+  /**
    * Optional transport-level control channel: PTY resize requests for a session
    * whose runner renders a TUI. Absent on transports without a resizable PTY
    * (a plain piped subprocess); surfaces must feature-detect before calling.

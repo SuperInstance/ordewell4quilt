@@ -8,7 +8,7 @@ const buildTask = (extra: Partial<Task> = {}): Task =>
 
 /** A controllable fake session: captures the onOutput/onExit callbacks so a test
  *  can drive them, and records kill/write calls. Mirrors ITerminalSession's shape. */
-function fakeSession(initialOutput = '') {
+function fakeSession(initialOutput = '', interactive = false) {
   let output = initialOutput;
   let onOutputCb: ((text: string) => void) | undefined;
   let onExitCb: ((code: number) => void) | undefined;
@@ -16,6 +16,7 @@ function fakeSession(initialOutput = '') {
   return {
     id: 's1',
     taskId: 't1',
+    interactive,
     onOutput: vi.fn((cb: (text: string) => void) => { onOutputCb = cb; }),
     onExit: vi.fn((cb: (code: number) => void) => { onExitCb = cb; }),
     kill: vi.fn(),
@@ -279,6 +280,44 @@ describe('VerdictEngine', () => {
 
       const log = (session as unknown as { _writeLog: string[] })._writeLog;
       expect(log.some((s: string) => s.includes('ORDEWELL_CONTINUE'))).toBe(true);
+    });
+
+    it('submits the resume token with Enter on an interactive session', () => {
+      // The VS Code terminal and tmux run a raw-mode TUI: a `\n` types the
+      // token into the composer but never sends it, so the agent stays paused.
+      const engine = new VerdictEngine();
+      const session = fakeSession('', true);
+      engine.watch(buildTask(), session);
+      session.emit('<<<ORDEWELL_CHECKPOINT: need approval>>>');
+
+      engine.approveCheckpoint('t1');
+
+      const log = (session as unknown as { _writeLog: string[] })._writeLog;
+      expect(log).toContain('ORDEWELL_CONTINUE\r');
+    });
+
+    it('rejects an interactive session with the reason and an Enter keystroke', () => {
+      const engine = new VerdictEngine();
+      const session = fakeSession('', true);
+      engine.watch(buildTask(), session);
+      session.emit('<<<ORDEWELL_CHECKPOINT: need approval>>>');
+
+      engine.rejectCheckpoint('t1', 'not the right approach');
+
+      const log = (session as unknown as { _writeLog: string[] })._writeLog;
+      expect(log).toContain('ORDEWELL_REJECT: not the right approach\r');
+    });
+
+    it('keeps the newline terminator for a line-oriented headless session', () => {
+      const engine = new VerdictEngine();
+      const session = fakeSession();
+      engine.watch(buildTask(), session);
+      session.emit('<<<ORDEWELL_CHECKPOINT: need approval>>>');
+
+      engine.approveCheckpoint('t1');
+
+      const log = (session as unknown as { _writeLog: string[] })._writeLog;
+      expect(log).toContain('\nORDEWELL_CONTINUE\n');
     });
 
     it('rejectCheckpoint writes ORDEWELL_REJECT with reason to session stdin', () => {

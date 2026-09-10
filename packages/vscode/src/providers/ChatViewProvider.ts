@@ -7,7 +7,7 @@ type ChatWebviewMessage =
       text: string;
       runners?: RunnerId[];
       actionContext?: {
-        type: 'approve' | 'retry' | 'skip' | 'cancel' | 'execute' | 'merge' | 'split' | 'addTask';
+        type: 'approve' | 'reject' | 'retry' | 'skip' | 'cancel' | 'execute' | 'merge' | 'split' | 'addTask';
         taskId?: string;
       };
     }

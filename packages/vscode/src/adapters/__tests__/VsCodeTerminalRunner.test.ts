@@ -85,6 +85,12 @@ describe('VsCodeTerminalRunner', () => {
     expect(streamed.join('')).toContain('<<<ORDEWELL_DONE_abc123>>>');
   });
 
+  it('marks its session interactive so resume tokens submit with Enter, not just type', async () => {
+    const { runner, spawnOpts } = makeRunner();
+    const session = await runner.spawn(spawnOpts);
+    expect(session.interactive).toBe(true);
+  });
+
   it('renders child output into the pseudoterminal with CRLF line endings', async () => {
     const { runner, child, spawnOpts } = makeRunner();
     await runner.spawn(spawnOpts);

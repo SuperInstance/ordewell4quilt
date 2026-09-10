@@ -31,6 +31,8 @@ export interface TmuxRunnerDeps {
 }
 
 class TmuxSession extends AbstractTerminalSession {
+  /** A tmux window is a real TTY running the agent's TUI, so it submits on Enter. */
+  readonly interactive = true;
   private outputBuffer = '';
   private offset = 0;
   private timer: ReturnType<typeof setInterval> | null = null;
