@@ -29,10 +29,8 @@
 
 ## What this is
 
-I kept giving a coding agent a multi-step goal and finding out on step 4 that it
-misread step 1 — with files already written. The plan lived in the model's head,
-so there was nothing to correct, only something to undo. Ordewell makes the plan
-the artifact instead.
+Give one goal, get back an ordered plan of coding-agent tasks — and you control
+every part of it before anything runs.
 
 - **The plan is a file you rewrite before anything runs.** Every task carries its
   runner, model, thinking effort and mode. Change any of them, add and remove
