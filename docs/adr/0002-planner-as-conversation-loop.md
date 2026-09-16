@@ -19,29 +19,66 @@ We decided to collapse the planner to a single messages loop — "the LLM either
 
 ## Considered options
 
-- **Tag-parsed questions (B at Q2).** Keep the `<<ORDEWELL_QUESTION>>` tag as a UI hint, delete only the `QueuedMessage` field. Rejected: keeps the parser gadget the user wanted gone; the tag is load-bearing presentation state, not just a hint.
-- **Typed PrdArtifact as hidden plumbing (B at Q1).** Keep `PrdArtifact` JSON internally to drive `generatePlanFromPrd`, invisible to the user. Rejected: redundant typed shape the user explicitly wanted removed; "messages only" means one channel, not one channel plus a hidden JSON.
-- **PRD as conversation history only, no field on plan (C at Q1).** Delete `PrdArtifact` entirely; re-prompt with full PRD markdown pasted as history on every task-generation turn. Rejected: bloats context; `prdMarkdown` as a single field is cheaper to re-render and re-feed.
-- **Lightweight UI-hint token for transitions (B at Q3).** The model emits a sentinel (`<<PRD>>`/`<<OUTLINE>>`) the UI parses for affordance rendering. Rejected: reintroduces parser machinery; conversation history would carry the token as raw text.
-- **Explicit user-driven transitions (C at Q3).** The model never stops grilling on its own; the user types `/prd` or `/outline` to force phases. Rejected: contradicts the grill-me thesis (the model decides when it's done); adds friction.
-- **Single PRD message, no separate preview (B at Q5).** The model writes one markdown PRD directly; "agree?" is the only gate. Rejected: skips the to-prd seam-check step the user wanted to match; the expensive full PRD gets rewritten whenever the model misread the goal.
-- **Lean preview that expands to full PRD on accept (C at Q5).** One user gate, two model turns. Rejected: loses the explicit accept gate between preview and full PRD.
-- **Fenced JSON inside prose (B at Q6).** The model emits `Here's the plan:\n` + a fenced JSON block; the system extracts the fence. Rejected: reintroduces a parser gadget (fence extraction) for marginal narration value.
-- **User-triggered generate button (C at Q6).** The outline loop is conversational; a "Generate plan" button triggers the JSON commit. Rejected: contradicts "model decides transitions" (Q3=A); adds a UI affordance the user wanted removed.
-- **Keep four operations relabeled (C at Q11).** Each phase stays a distinct Session method; the host infers which to call from plan state. Rejected: keeps the multi-artifact surface and the host routing ladder the user wanted gone.
-- **Three operations: start + continue + commit (B at Q11).** A separate `commitPlanFromJson` the AI service calls back into. Rejected: invents an extra seam; the JSON commit is just "the planner's final message happened to be JSON," not a distinct operation.
-- **Deterministic slug from goal (B at Q7).** Kebab-case the goal string. Rejected: produces ugly/ambiguous slugs for long goals.
-- **User-prompted slug via modal (C at Q7).** VS Code input box at save time. Rejected: breaks the chat-only UX thesis.
-- **Distinct research phase before conversation (A at Q8).** Research happens once, then dialogue is purely messages. Rejected by the user: less OpenCode-like; the user wanted interleaving.
-- **On-demand research mid-conversation (C at Q8).** No upfront research pass; the model explores only when a question needs grounding. Rejected: risks under-grounded questions early.
-- **researchLog collapses into conversationHistory (B at Q9).** One unified store including tool results. Rejected: tool results (file contents) bloat persisted state and model context; the model gets them via the API tool-use stream, not by re-reading conversation history.
-- **Drop researchLog entirely (C at Q9).** Tool calls are ephemeral; only prose persists. Rejected: loses the tool-call evidence trail on reload.
-- **Model summarizes tool results into prose (B at Q10).** Tool history is ephemeral; only prose summaries persist. Rejected: loses raw detail the model might need in later turns.
-- **Mirror tool results into conversationHistory (C at Q10).** `conversationHistory` becomes the full API message history. Rejected: bloats model context with raw file contents every turn.
-- **One-shot migration of old sessions (A at Q12).** A `migrateLegacyPlan` function converts old shape to new on load. Rejected by the user: "Remove all the previous sessions, I don't care."
-- **Version field + lazy migration (C at Q12).** Old sessions load read-only with a re-plan notice. Rejected by the user for the same reason.
-- **Core + VS Code only (B at Q13).** CLI and Web keep current behavior temporarily. Rejected: creates the two-behaviors-one-codebase mess CONTEXT.md warns against.
-- **Core only, surfaces later (C at Q13).** Ship core with compatibility shims; update surfaces separately. Rejected for the same reason.
+- **Keep the `<<ORDEWELL_QUESTION>>` tag as a UI hint,** deleting only the
+  `QueuedMessage` field. Rejected: the tag is load-bearing presentation state,
+  not just a hint, and keeping the parser gadget was the thing being removed.
+- **Keep a typed `PrdArtifact` internally** to drive `generatePlanFromPrd`,
+  invisible to the user. Rejected: "messages only" means one channel, not one
+  channel plus a hidden JSON shape the user had explicitly asked to see gone.
+- **PRD as conversation history only, no field on the plan.** Delete
+  `PrdArtifact` entirely and re-prompt with the full PRD markdown pasted as
+  history on every generation turn. Rejected: bloats context — a single
+  `prdMarkdown` field is cheaper to re-render and re-feed.
+- **A lightweight UI-hint token for transitions** (`<<PRD>>`/`<<OUTLINE>>`
+  sentinels the UI parses for affordances). Rejected: reintroduces parser
+  machinery, and the token would ride into conversation history as raw text.
+- **User-driven transitions** — the model never stops grilling on its own; the
+  user types `/prd` or `/outline` to force phases. Rejected: contradicts the
+  point of the interview (the model decides when it's done) and adds friction.
+- **One PRD message, no separate preview.** Rejected: it skips the seam-check
+  between preview and full document, so the expensive full PRD gets rewritten
+  every time the model misread the goal.
+- **Lean preview that expands silently on accept.** One user gate, two model
+  turns — but it loses the explicit accept step between preview and full PRD.
+- **Fenced JSON inside prose** (`Here's the plan:` + a fence the system
+  extracts). Rejected: buys marginal narration value at the price of another
+  parser gadget.
+- **A user-triggered Generate Plan button.** Rejected: same objection as
+  user-driven transitions, plus a UI affordance the redesign was removing.
+- **Keep the four operations, relabeled.** Rejected: keeps the multi-artifact
+  surface and the host routing ladder this ADR exists to delete.
+- **Three operations: start + continue + a separate `commitPlanFromJson`.**
+  Rejected: invents a seam where there is none — the commit is just "the
+  planner's final message happened to be JSON".
+- **Deterministic slug from the goal string** (kebab-case it). Rejected:
+  produces ugly, ambiguous slugs on long goals.
+- **User-prompted slug via a VS Code input modal.** Rejected: breaks the
+  chat-only thesis.
+- **A distinct research phase before conversation.** Rejected: less
+  OpenCode-like, and the interleaving of exploration with questions is the
+  behavior being copied on purpose.
+- **On-demand-only research** (no upfront pass). Rejected: risks
+  under-grounded questions in the early turns, where they matter most.
+- **Collapse `researchLog` into `conversationHistory`** (one store, tool
+  results included). Rejected: file contents bloat both persisted state and
+  model context; the model receives them via the API tool-use stream, not by
+  re-reading history.
+- **Drop `researchLog` entirely** — tool calls are ephemeral, only prose
+  persists. Rejected: loses the tool-call evidence trail across a reload.
+- **Have the model summarize tool results into prose** (tool history
+  ephemeral). Rejected: same loss — raw detail the model may need in a later
+  turn is gone.
+- **Mirror tool results into `conversationHistory`** (it becomes the full API
+  message history). Rejected for the same context-bloat reason as the
+  collapse option.
+- **Migrate old sessions** with a `migrateLegacyPlan` on load. **Wipe them.**
+  The wipe won: the shape change is large enough that preserving old state
+  costs more than it saves. Both migration variants (full one-shot, and a
+  version field with read-only legacy loading) were considered and dropped
+  for that reason.
+- **Ship core + VS Code first,** CLI and web later. Rejected: two behaviors
+  in one codebase is exactly the mess CONTEXT.md warns against. Rejected in
+  the shim variant too, for the same reason.
 
 ## Consequences
 
