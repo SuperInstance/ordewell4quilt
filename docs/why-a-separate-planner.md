@@ -35,7 +35,7 @@ strongest model *for that specific change* — but only for that change. A migra
 
 If one expensive model does both, you pay top-tier inference for the cheap half (planning) and you
 pay it *again* for every trivial task, because there's no mechanism to dial the model down once the
-context is hot. Coupling planning to execution throws away the cheapest optimization available:
+context is hot. Coupling planning to execution throws away the cheapest lever available:
 **spend reasoning where it changes the outcome, and nowhere else.**
 
 In Ordewell the planner defaults to a cheap model (`deepseek/deepseek-v4-flash` via OpenRouter, or
@@ -115,14 +115,15 @@ The planner is making a portfolio decision across the whole job, not a single gl
 only expressible because the plan is a list of independently-parameterized tasks instead of one
 monolithic agent run.
 
-## The honest part: this is an optimization, not a moat
+## The honest part: what this buys, and what it doesn't
 
-I'll be blunt, because pretending otherwise wastes everyone's time: the *orchestration loop itself*
-— goal → plan → DAG → spawn → review — is being absorbed into the coding platforms as a native,
+Blunt, because pretending otherwise wastes everyone's time: the *orchestration loop itself* —
+goal → plan → DAG → spawn → review — is being absorbed into the coding platforms as a native,
 free feature, and a separate-planner pattern is something any of them can replicate. If you're
-evaluating this as a startup, the orchestration mechanics are not where a defensible business lives.
+evaluating this as a startup, the orchestration mechanics are not where a defensible business
+lives.
 
-What I think *is* durably interesting, and is what I'd actually defend in an interview:
+What I think *is* durable about the design:
 
 - **Decoupling the planning workload from the execution workload** is what makes per-task routing
   possible at all, and it generalizes — the planner doesn't care which executor runs the task, so
