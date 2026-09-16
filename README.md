@@ -29,12 +29,33 @@
 
 ## What this is
 
-- **A plan you can rewrite before a token is spent.** The plan is a typed artifact, not an agent's internal state: every task carries a runner, model, thinking effort and mode, and you can change any of them, add and remove tasks, and rewire dependencies — without losing completed work or round-tripping the AI.
-- **The right model per task, chosen in the open.** The planner makes one portfolio decision across the whole plan — a security refactor and a README update do not deserve the same model — and shows you every assignment before anything runs ([why a separate planner?](docs/why-a-separate-planner.md)).
-- **Verdicts from evidence, not opinion.** A task completes only when its unique completion marker appears in the runner's output; exit code is retained as diagnostic evidence. The model is never the tie-breaker. Stuck tasks can be advanced with *Mark complete*, and a task marked done by mistake goes back with *Mark not done*.
-- **A planner that talks back.** Planning is one continuous chat: it researches your repo read-only, asks when your goal is vague, and its final message *is* the plan ([ADR-0002](docs/adr/0002-planner-as-conversation-loop.md)). Reads run in parallel; anything reaching outside the workspace asks once; commands that would write are refused outright ([ADR-0008](docs/adr/0008-planner-exploration-envelope.md)).
-- **No extra API key required.** Claude Code, Codex, or OpenCode can *be* the planner, strictly read-only, on the subscription you already hold for the runners ([ADR-0009](docs/adr/0009-coding-agents-as-planners.md)).
-- **Multi-runner by design.** Enable several and the planner assigns one per task. Claude Code, Codex and OpenCode ship built-in; anything else — Aider, your own CLI — is a plugin manifest, not a code change.
+I kept giving a coding agent a multi-step goal and finding out on step 4 that it
+misread step 1 — with files already written. The plan lived in the model's head,
+so there was nothing to correct, only something to undo. Ordewell makes the plan
+the artifact instead.
+
+- **The plan is a file you rewrite before anything runs.** Every task carries its
+  runner, model, thinking effort and mode. Change any of them, add and remove
+  tasks, rewire dependencies — completed work survives, and nothing runs until
+  you say go.
+- **One runner and model per task, all visible at once.** A security refactor and
+  a README update don't deserve the same model. The planner assigns across the
+  whole plan and shows you every assignment first ([why a separate planner?](docs/why-a-separate-planner.md)).
+- **A task is done when its completion marker appears in the runner's output —
+  and not before.** Exit code is kept as diagnostic evidence. No model grades its
+  own work, and a task that ends without its marker fails loudly instead of
+  passing quietly.
+- **The planner is read-only and talks to you.** It researches the repo, asks
+  when your goal is vague, and its final message *is* the plan
+  ([ADR-0002](docs/adr/0002-planner-as-conversation-loop.md)). Reads run in
+  parallel; anything reaching outside the workspace asks once; commands that
+  would write are refused outright ([ADR-0008](docs/adr/0008-planner-exploration-envelope.md)).
+- **No extra API key required.** Claude Code, Codex, or OpenCode can *be* the
+  planner, strictly read-only, on the subscription you already hold for the
+  runners ([ADR-0009](docs/adr/0009-coding-agents-as-planners.md)).
+- **Multi-runner by design.** Enable several and the planner assigns one per task.
+  Claude Code, Codex and OpenCode ship built-in; anything else — Aider, your own
+  CLI — is a plugin manifest, not a code change.
 
 ---
 
