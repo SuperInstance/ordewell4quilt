@@ -2,29 +2,88 @@
 
 **Status:** accepted
 
-When generating plans, Ordewell must pick a runner mode (Claude's `default`/`acceptEdits`/`bypassPermissions`, OpenCode's `build`/`plan`, etc.) per task. Mode names are runner-specific, conventions vary (OpenCode has no safer-than-build option; Codex will differ again), and the planner was observed defaulting to the least autonomous mode (`default`/"ask before edits") because the prompt anchored on the first-listed mode and the autonomous mode's description scared it off.
+## Problem
 
-We decided that mode resolution is **planner-nudged, parser-validated, never runtime-overridden**, driven by **symmetric manifest tags** (`autonomous` / `safe`) and a **global user toggle** (`ordewell.autonomousMode`, default ON, surfaced via `/auto`).
+Generating a plan means picking a runner mode per task — Claude's
+`default`/`acceptEdits`/`bypassPermissions`, OpenCode's `build`/`plan`, Codex's
+own set. Three things made that hard to just ask the planner to do:
 
-Key properties:
-- **The plan is the source of truth.** The toggle is read *only at generation*; the orchestrator never replaces `task.taskMode` at spawn. What the plan says is what runs.
-- **Manifests declare what autonomy means for that runner.** Core never hardcodes mode IDs. Each manifest tags one mode `autonomous: true` and one `safe: true` (OpenCode's `build` wears both hats — an honest no-op, not a mystery).
-- **The planner is steered, not coerced.** `buildModeGuide` names the resolved default per runner explicitly, lists the autonomous mode first, and instructs: "default to this unless the task specifically needs more caution." The parser only intervenes on *invalid* emissions; it picks the `autonomous`/`safe`-tagged mode per the toggle as fallback. The planner keeps portfolio judgment — it may still emit a more conservative mode for a task it judges risky.
-- **`plan` mode is valid but guide-steered-away.** The parser respects `plan` (no rewrite); the guide simply doesn't direct the planner toward it for build-style tasks. Manual per-task override via the UI remains sacred under both toggle states.
+- Mode names are runner-specific, and the conventions disagree. OpenCode has no
+  mode safer than `build`; Codex differs again.
+- The planner was observed defaulting to the least autonomous mode
+  (`default`/"ask before edits"). Reading the prompt afterwards, the cause was
+  plain: the mode list anchored on whatever came first, and the autonomous
+  mode's own description ("use only when you don't need supervision") was
+  scaring it off.
+- We did not want a global toggle that silently rewrites plans after the fact.
+  What the plan says is what runs, or the plan stops being worth reviewing.
 
-## Considered options
+## Decision
 
-- **Runtime override (β at Q4).** Toggle rewrites modes at spawn for all tasks, including already-generated plans. Rejected: diverges "what the plan says" from "what runs" — the silent state the project deliberately avoids. Also destroys the planner's per-task judgment.
-- **Hard parser override (β at Q4).** Toggle forces all non-plan AI tasks to the autonomous mode at parse time, ignoring planner emissions. Rejected: discards portfolio judgment; plan JSON shows a mode the planner didn't emit with no signal why.
-- **Per-runner toggle (Q2).** `ordewell.autonomousByRunner: Record`. Rejected: runner heterogeneity is already absorbed by the manifest tags; a per-runner map adds state and UI complexity for a marginal case. One-off overrides use the existing per-task dropdown.
-- **Positional safe fallback (A at Q3).** OFF resolves to the first-listed manifest mode. Rejected: reordering the manifest silently flips OFF behavior.
-- **Parser rewrites `plan` (α/γ at Q6).** Rejected: under OFF, `plan`→`build` for OpenCode makes the task *more* permissive — the opposite of what OFF means. Removing `plan` from manifests entirely (γ) breaks existing saved plans.
-- **`plan` is sacrosanct (A at Q5).** Rejected by product: plan mode complicates things; analysis can be done in the other modes. Settled as (β): guide steers away, parser stays clean.
+Mode resolution is **planner-nudged, parser-validated, never runtime-overridden**, driven by **symmetric manifest tags** (`autonomous` / `safe`) and a **global user toggle** (`ordewell.autonomousMode`, default ON, surfaced via `/auto`).
+
+Concretely:
+
+- **The plan is the source of truth.** The toggle is read only at generation
+  time; the orchestrator never replaces `task.taskMode` at spawn. A user who
+  flips the toggle after generating sees no change until they regenerate. That
+  is deliberate — it is the same rule `/model set` follows.
+- **Manifests declare what autonomy means for that runner.** Core never
+  hardcodes mode IDs. Each manifest tags one mode `autonomous: true` and one
+  `safe: true`. OpenCode's `build` wears both tags — an honest no-op, since
+  OpenCode has nothing safer than build, rather than a mystery.
+- **The planner is steered, not coerced.** `buildModeGuide` names the resolved
+  default per runner explicitly, lists the autonomous mode first, and says
+  "default to this unless the task specifically needs more caution." The parser
+  only intervenes on invalid emissions; its fallback picks the
+  `autonomous`/`safe`-tagged mode per the toggle. The planner keeps portfolio
+  judgment — it may still pick a more conservative mode for a task it judges
+  risky.
+- **`plan` mode stays valid but is steered away from** for build-style tasks.
+  The parser never rewrites it; the guide simply does not point the planner at
+  it. Manual per-task override in the UI wins under every toggle state.
+
+## Alternatives considered
+
+- **Runtime override** — toggle rewrites modes at spawn, including on
+  already-generated plans. Rejected: it makes "what the plan says" differ from
+  "what runs", which is the exact silent state this project refuses to create.
+  It also erases the planner's per-task judgment.
+- **Hard parser override** — toggle forces every non-plan AI task to the
+  autonomous mode at parse time, ignoring what the planner emitted. Rejected
+  for the same reason plus a concrete artifact: the plan JSON would show a mode
+  the planner did not emit, with no signal why.
+- **Per-runner toggle** (`ordewell.autonomousByRunner`). Rejected: manifest
+  tags already absorb runner heterogeneity; a per-runner map adds state and UI
+  for a marginal case, and one-off overrides already exist as the per-task
+  dropdown.
+- **Positional safe fallback** — with the toggle OFF, resolve to the
+  first-listed manifest mode. Rejected: reordering a manifest would silently
+  change OFF behavior.
+- **Parser rewrites `plan`** — under OFF, map `plan`→`build` for OpenCode.
+  Rejected twice over: it makes the task *more* permissive, the opposite of
+  what OFF means; and dropping `plan` from manifests entirely would break
+  saved plans.
+- **Remove `plan` mode as a product decision** — analysis can happen in the
+  other modes. Rejected: it complicates the common case to simplify a rare
+  one. The guide-steers-but-parser-respects settlement keeps it available
+  without pushing anyone toward it.
 
 ## Consequences
 
-- A user who toggles autonomous OFF after generating a plan sees no change until they regenerate — the plan retains its modes. This is deliberate (plan as artifact) and consistent with `/model set` only affecting future generations.
-- Manifest authors must tag at least one mode `autonomous` and one `safe` or generation degrades to the pre-fix ad-hoc prompt. Builtin manifests (`claude-code`, `opencode`) will tag both.
-- OpenCode under ON and OFF both resolve to `build` (it wears both tags). Correct: OpenCode has no safer-than-build mode. The toggle is effectively a no-op for OpenCode-only plans.
-- `bypassPermissions`'s manifest description should drop the "use only in sandboxed/CI environments" caveat, since Ordewell's purpose is autonomous runs — that caveat caused the original cautious-LLM bug. Manifest copy is manifestation-specific, not core logic, so editing it is not a violation of the "no hardcoded modes" rule.
-- A future runner whose `plan` mode isn't read-only must still be respected if a user manually selects it via the UI. The toggle steers the planner; it never overrides manual choice.
+- The toggle is generation-time only. Already stated above; worth repeating
+  because it is the property users ask about.
+- Manifest authors must tag at least one mode `autonomous` and one `safe`, or
+  generation degrades to the pre-fix ad-hoc prompt. The builtin manifests
+  (`claude-code`, `opencode`) tag both.
+- OpenCode resolves to `build` whether the toggle is ON or OFF. The toggle is
+  effectively a no-op for OpenCode-only plans. Correct, not a bug: there is
+  nothing for it to switch between.
+- `bypassPermissions`' manifest description no longer carries the "use only in
+  sandboxed/CI environments" caveat. That caveat is what anchored the planner
+  away from autonomous modes in the first place — a self-inflicted bug caused
+  by our own copy. Manifest descriptions are prompt material, not core logic;
+  editing them does not violate the no-hardcoded-modes rule.
+- A future runner whose `plan` mode is not read-only must still be reachable
+  by manual selection in the UI. The toggle steers the planner; it never
+  overrides a human's explicit choice.
