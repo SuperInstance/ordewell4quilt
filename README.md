@@ -6,7 +6,7 @@
 </p>
 
 <p align="center">
-  <strong>Turn one goal into an ordered plan of coding-agent tasks — each with its own runner, model and mode — then execute and verify it.</strong>
+  <strong>Turn one goal into a graph of coding-agent tasks — parallel where the work allows it, every task its own runner, model and session — then execute and verify it.</strong>
 </p>
 
 <p align="center">
@@ -23,6 +23,19 @@
 
 <p align="center">
   <img src="assets/readme/hero-plan-to-run.gif" width="900" alt="Ordewell's terminal UI: a goal is typed, the planner reads the repo and refuses a write, it asks whether the limiter should reuse the existing Redis client, then commits a seven-task plan — each task showing its runner, model, thinking effort and mode — and executes it to 7/7 complete.">
+</p>
+
+<p align="center">
+  <em>One goal becomes a graph: parallel where the work is independent, ordered where it
+  isn't — every node its own agent session, every verdict earned by a marker in that
+  session's output, never by a model's opinion.</em>
+</p>
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/readme/plan-graph-dark.svg">
+    <img src="assets/readme/plan-graph.svg" width="720" alt="A plan graph: a goal fans out into six ordered tasks with dashed dependency edges. Each task box names its own runner (claude, codex or opencode), and every task closes with MARKER ✓ — completion proven in the runner's output, parallelism decided by the dependency graph, not by one agent doing everything in sequence.">
+  </picture>
 </p>
 
 ---
