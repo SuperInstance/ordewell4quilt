@@ -27,15 +27,9 @@
 
 <p align="center">
   <em>One goal becomes a graph: parallel where the work is independent, ordered where it
-  isn't — every node its own agent session, every verdict earned by a marker in that
-  session's output, never by a model's opinion.</em>
-</p>
-
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/readme/plan-graph-dark.svg">
-    <img src="assets/readme/plan-graph.svg" width="720" alt="A plan graph: a goal fans out into six ordered tasks with dashed dependency edges. Each task box names its own runner (claude, codex or opencode), and every task closes with MARKER ✓ — completion proven in the runner's output, parallelism decided by the dependency graph, not by one agent doing everything in sequence.">
-  </picture>
+  isn't — every task its own runner and session, every verdict earned by a marker in that
+  session's output, never by a model's opinion. Claude Code, Codex or OpenCode per task,
+  mixed freely in one plan.</em>
 </p>
 
 ---
